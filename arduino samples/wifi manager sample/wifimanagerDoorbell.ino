@@ -1,15 +1,37 @@
-#include <FS.h>                   //this needs to be first, or it all crashes and burns...
+/***************************************************************************
+ Code to use with MQTT wifi doorbell, see https://www.tindie.com/products/ErikLemcke/mqtt--wifi-doorbell-with-esp8266/
+ Created by Erik Lemcke 22-06-2018
+
+
+ This code can be used from the arduino library, you will need the following libraries:
+ https://github.com/tzapu/WiFiManager     Included in this repository (src folder)
+ https://github.com/bblanchon/ArduinoJson
+ https://github.com/knolleary/pubsubclient
+ https://github.com/esp8266/Arduino/tree/master/libraries/ESP8266mDNS
+
+ credits:
+
+ https://tzapu.com/                   for the awesome WiFiManger library
+ https://github.com/esp8266/Arduino   for the ESP8266 arduino core
+ https://arduinojson.org/             for the ArduinoJson library
+ https://pubsubclient.knolleary.net/  for the mqtt library
+  
+ ***************************************************************************/
+#include <fs.h>                   //this needs to be first, or it all crashes and burns...
+#import "index.h"
 
 #include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
 
 //needed for library
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager
+#include "src/WiFiManager.h"          //https://github.com/tzapu/WiFiManager
 
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #include <PubSubClient.h>
+
+#include <ESP8266mDNS.h>        // Include the mDNS library
 
 int doorbellState = 0;
 int resetState = 0;
@@ -20,6 +42,8 @@ PubSubClient client(espClient);
 
 WiFiManager wifiManager;
 
+ESP8266WebServer server(80);
+
 
 //define your default values here, if there are different values in config.json, they are overwritten.
 char mqtt_server[40];
@@ -27,6 +51,7 @@ char mqtt_port[6] ;
 char mqtt_username[40];
 char mqtt_password[40];
 char mqtt_topic[40];
+char mqtt_status[60] = "unknown";
 
 //flag for saving data
 bool shouldSaveConfig = false;
@@ -42,6 +67,57 @@ void configModeCallback (WiFiManager *myWiFiManager) {
   SPIFFS.format();
 }
 
+//Handle webserver root request
+void handleRoot() {
+  Serial.println("Handling webserver request");
+  
+  String configPage = config_page;
+
+  configPage.replace("{v}", "Wifi doorbell configuration");
+  configPage.replace("{1}", mqtt_server);
+  configPage.replace("{2}", mqtt_port);
+  configPage.replace("{3}", mqtt_username);
+  configPage.replace("{4}", mqtt_password);
+  configPage.replace("{5}", mqtt_topic);
+  configPage.replace("{6}", mqtt_status);
+  
+  server.send(200, "text/html", configPage);
+  
+}
+
+void saveSettings() {
+  Serial.println("Handling webserver request savesettings");
+
+  //store the updates values in the json config file
+    DynamicJsonBuffer jsonBuffer;
+    JsonObject& json = jsonBuffer.createObject();
+    json["mqtt_server"] = server.arg("mqtt_server");
+    json["mqtt_port"] = server.arg("mqtt_port");
+    json["mqtt_username"] = server.arg("mqtt_username");
+    json["mqtt_password"] = server.arg("mqtt_password");
+    json["mqtt_topic"] = server.arg("mqtt_topic");
+   
+    File configFile = SPIFFS.open("/config.json", "w");
+    if (!configFile) {
+      Serial.println("failed to open config file for writing");
+    }
+
+    json.printTo(Serial);
+    json.printTo(configFile);
+    configFile.close();
+
+    //put updated parameters into memory so they become effective immediately
+    server.arg("mqtt_server").toCharArray(mqtt_server,40);
+    server.arg("mqtt_port").toCharArray(mqtt_port,40);
+    server.arg("mqtt_username").toCharArray(mqtt_username,40);
+    server.arg("mqtt_password").toCharArray(mqtt_password,40);
+    server.arg("mqtt_topic").toCharArray(mqtt_topic,40);
+   
+    server.send(200, "text/html", "Settings have been saved. You will be redirected to the configuration page in 5 seconds <meta http-equiv=\"refresh\" content=\"5; url=/\" />");
+    
+    //mqtt settings might have changed, let's reconnect
+    reconnect();
+}
 
 void setup() {
   // put your setup code here, to run once:
@@ -53,9 +129,6 @@ void setup() {
   //pinMode(2, OUTPUT);
 
   Serial.println("before format");
-
-  //clean FS, for testing
- // SPIFFS.format();
 
   //read configuration from FS json
   Serial.println("mounting FS...");
@@ -96,9 +169,6 @@ void setup() {
   //end read
 
 
-
-
-
   // The extra parameters to be configured (can be either global or just in the setup)
   // After connecting, parameter.getValue() will get you the configured value
   // id/name placeholder/prompt default length
@@ -120,11 +190,6 @@ void setup() {
 
   wifiManager.setAPCallback(configModeCallback);
 
- 
-
-  //set static ip
-  //wifiManager.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
-  
   //add all your parameters here
   wifiManager.addParameter(&custom_mqtt_server);
   wifiManager.addParameter(&custom_mqtt_port);
@@ -132,19 +197,7 @@ void setup() {
   wifiManager.addParameter(&custom_mqtt_password);
   wifiManager.addParameter(&custom_mqtt_topic);
 
-  //reset settings - for testing
-  //wifiManager.resetSettings();
-
-  //set minimu quality of signal so it ignores AP's under that quality
-  //defaults to 8%
-  //wifiManager.setMinimumSignalQuality();
-  
-  //sets timeout until configuration portal gets turned off
-  //useful to make it all retry or go to sleep
-  //in seconds
-  //wifiManager.setTimeout(120);
-
-  //fetches ssid and pass and tries to connect
+    //fetches ssid and pass and tries to connect
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
@@ -157,7 +210,13 @@ void setup() {
   }
 
   //if you get here you have connected to the WiFi
-  Serial.println("connected...yeey :)");
+  Serial.println("connected...!");
+
+  //Define url's 
+  server.on("/", handleRoot);
+  server.on("/saveSettings", saveSettings);
+  server.begin();
+
 
   //read updated parameters
   strcpy(mqtt_server, custom_mqtt_server.getValue());
@@ -193,66 +252,73 @@ void setup() {
   Serial.println("local ip");
   Serial.println(WiFi.localIP());
 
+  //Expose as mdns
+  if (!MDNS.begin("doorbell")) {  // Start the mDNS responder for doorbell.local
+    Serial.println("Error setting up MDNS responder!");
+  } else {
+      Serial.println("mDNS responder started");
+      MDNS.addService("http", "tcp", 80);
+  }
+
 }
 
 
+//MQTT reconnect function
 void reconnect() {
-  int connectCount = 0;
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Attempt to connect
-    // If you do not want to use a username and password, change next line to
-    // if (client.connect("ESP8266Client")) {
-    if (client.connect("ESP8266Client", mqtt_username, mqtt_password)) {
-      Serial.println("connected");
-      //after a reconnect, make sure we send a "off" message so that Home assistant will prperly initialize value after reconnect 
-      Serial.println("sending 'off' message");
-      client.publish(mqtt_topic, "off" , true);
-    } else {
-      //Reset esp after 5 failed connect attempts
-      //maybe not the best ide, because it will reset ESP when homeassistant is offline for a bit...
-      if (connectCount == 5){
-        Serial.print("Too many failures, going for a hard reboot");
-        SPIFFS.format();
-        wifiManager.resetSettings();
-        delay(500);
-        ESP.restart();     
+  client.disconnect();
+  client.setServer(mqtt_server, atoi(mqtt_port));
+  Serial.print("Attempting MQTT connection to ");
+  Serial.print(mqtt_server);
+  Serial.print(" on port ");
+  Serial.print(mqtt_port);
+  Serial.print("...");
+  
+  if (client.connect("ESP8266Client", mqtt_username, mqtt_password)) {
+     Serial.println("connected");
+     String("<div style=\"color:green;float:left\">connected</div>").toCharArray(mqtt_status,60);
+     Serial.print("sending 'off' message to ");
+     Serial.print(mqtt_server);
+     Serial.print(" on port ");
+     Serial.print(mqtt_port);
+     Serial.print(" with topic ");
+     Serial.println(mqtt_topic);
+     client.publish(mqtt_topic, "off" , true);
+   } else {
+     Serial.print("failed, rc=");
+     String("<div style=\"color:red;float:left\">connection failed</div>").toCharArray(mqtt_status,60);
+     Serial.print(client.state());
+     Serial.println(" try again in 5 seconds");
+
+    unsigned long previousMillis1 = 0;
+
+     //connection failed, Go into a (non-blocking) loop until we are connected 
+     while (!client.connected()) {
+        resetstate();
+         server.handleClient();  //call to handle webserver connection needed, because the while loop will block the processor
+         unsigned long currentMillis1 = millis();
+         if(currentMillis1 - previousMillis1 >= 5000) {
+         previousMillis1 = currentMillis1;
+         Serial.print("Attempting MQTT connection...");
+          if (client.connect("ESP8266Client", mqtt_username, mqtt_password)) {
+                Serial.println("connected");
+                String("<div style=\"color:green;float:left\">connected</div>").toCharArray(mqtt_status,60);
+             } else {
+                     String("<div style=\"color:red;float:left\">connection failed</div>").toCharArray(mqtt_status,60);
+                Serial.print("failed, rc=");
+                Serial.print(client.state());
+                Serial.println(" try again in 5 seconds");
+             }
+         }
       }
-      
-      connectCount++;
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
+   }
 }
 
 long lastMsg = 0;
 
-void loop() {
-  
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-  doorbellState = digitalRead(doorbellPin);
-  resetState = digitalRead(12);
-
- if ( doorbellState == LOW ) {
-    // Put your code here.  e.g. connect, send, disconnect.
-    client.publish(mqtt_topic, "on" , true);
-    Serial.println("Doorbell is pressed!, sending 'on' message");
-
-    //wait 5 seconds, then publish the off message
-    delay( 5000 );
-    Serial.println("sending 'off' message");
-    client.publish(mqtt_topic, "off" , true);
-  }
-
-  if (resetState == LOW){
+//Initialize a reset is pin 12 is low
+void resetstate (){
+   resetState = digitalRead(12);
+   if (resetState == LOW){
     Serial.println("It seems someone wants to go for a reset...");
    //stuff below doesn't work yet, since the ESP built in led is connected to pin 2, but the octocoupler is too...
     
@@ -282,10 +348,40 @@ void loop() {
     ESP.restart();     
     
   }
+}
 
-
-
-
+void loop() {
+  //for the webserver
+  server.handleClient();
   
+  resetstate();
   
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+  doorbellState = digitalRead(doorbellPin);
+  resetState = digitalRead(12);
+
+ if ( doorbellState == LOW ) {
+    // Put your code here.  e.g. connect, send, disconnect.
+    client.publish(mqtt_topic, "on" , true);
+    Serial.print("Doorbell is pressed!, sending 'on' message to ");
+    Serial.print(mqtt_server);
+    Serial.print(" on port ");
+    Serial.print(mqtt_port);
+    Serial.print(" with topic ");
+    Serial.println(mqtt_topic);
+
+    //wait 5 seconds, then publish the off message
+    delay( 5000 );
+    Serial.print("sending 'off' message to ");
+    Serial.print(mqtt_server);
+    Serial.print(" on port ");
+    Serial.print(mqtt_port);
+    Serial.print(" with topic ");
+    Serial.println(mqtt_topic);
+    client.publish(mqtt_topic, "off" , true);
+    
+  }
 }
