@@ -10,14 +10,14 @@ I use the folowing settings for programming:
 
 - Board: Generic EP8266 module
 - Flash mode: QIO
-Flash size: 512K (64K SPIFFS)
-Debugging port: Disabled
-Debug level: None
-IwIP variant: V2 lower memory
-reset method: ck
-crystal frequency: 26Mhz
-Flash frequency: 40Mhz
-CPU frequency: 80Mhz
-Builtin led: 2
-Upload speed: 115200
-Erase flash: Only sketch
+- Flash size: 512K (64K SPIFFS)
+- Debugging port: Disabled
+- Debug level: None
+- IwIP variant: V2 lower memory
+- reset method: ck
+- crystal frequency: 26Mhz
+- Flash frequency: 40Mhz
+- CPU frequency: 80Mhz
+- Builtin led: 2
+- Upload speed: 115200
+- Erase flash: Only sketch
