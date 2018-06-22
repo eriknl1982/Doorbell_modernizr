@@ -9,9 +9,13 @@ To program the board, make sure you provide it with power, plug in a ftdi module
 I use the folowing settings for programming:
 
 Board: Generic EP8266 module
+
 Flash mode: QIO
+
 Flash size: 512K (64K SPIFFS)
+
 Debugging port: Disabled
+
 Debug level: None
 IwIP variant: V2 lower memory
 reset method: ck
