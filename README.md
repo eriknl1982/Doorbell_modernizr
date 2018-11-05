@@ -1,5 +1,3 @@
-# Doorbell modernizr
-
 ![Imgur](https://i.imgur.com/4t2Ilsw.png)
 
 This repository contains sample code and eagle/gerber/STL files for the MQTT doorbell board I sell on tindie: https://www.tindie.com/products/ErikLemcke/doorbell-modernizr/
