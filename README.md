@@ -1,10 +1,11 @@
 ![Imgur](https://i.imgur.com/4t2Ilsw.png)
 
-This repository contains sample code and eagle/gerber/STL files for the MQTT doorbell board I sell on tindie: https://www.tindie.com/products/ErikLemcke/doorbell-modernizr/
+This repository contains sample code and eagle/gerber/STL files for the Doorbell Modernizr I sell on tindie: https://www.tindie.com/products/ErikLemcke/doorbell-modernizr/
 
-This board that can transfer your ordinary doorbell (running on 8 - 24v ac) to a wifi doorbell. The board works with an ESP12 ESP8266 module that you can program with a FTDI module and (for example) the Arduino IDE. Whenever someone presses your doorbell, the board can execute an action, while leaving the regular doorbell circuit intact, so that if your module crashes for one or another reason, your doorbell will still be working. The assembled version can be used without any programming to send MQTT messages, for example to Home Assistant.
+The Doorbell Modernizr is a device that can transform your ordinary doorbell (running on 8 - 24v ac) into a "smart" wifi doorbell.
+Whenever someone presses your doorbell, the Doorbell Modernizr can send a signal to your home automation system (currently supported: Home assistant, Domoticz and Openhab).
 
-To program the board, make sure you provide it with power, plug in a ftdi module and set the dipswitch to on.
+If you want to program the device yourself (for example with the Arduino IDE),provide it with power, plug in a ftdi module and set the dipswitch on the pcb to on.
 
 I use the folowing settings for programming:
 
